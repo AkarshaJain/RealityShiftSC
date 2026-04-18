@@ -26,6 +26,8 @@
   ExportUid: 00000000-0000-0000-0000-000000000000
   PackagePolicy: CanBeUnpacked
   ScriptInputsHidden:
+    backendUrl: false
+    internetModule: false
     statusText: false
   ScriptTypesHidden:
     {}
@@ -37,8 +39,12 @@
     []
   DefaultScriptInputs:
     - statusText: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
+      internetModule: !<reference.InternetModule> 00000000-0000-0000-0000-000000000000
+      backendUrl: "http://10.25.33.161:3000"
   ScriptTypes:
     -
       {}
   InputLines:
     - // @input SceneObject statusText
+    - // @input Asset.InternetModule internetModule
+    - '// @input string backendUrl = "http://10.25.33.161:3000"'

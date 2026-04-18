@@ -49,3 +49,17 @@ declare const CameraModule: {
     createCameraRequest(): CameraModule.CameraRequest;
     CameraId: typeof CameraModule.CameraId;
 };
+
+declare class Request {
+    constructor(url: string, init?: { method?: string; body?: string; headers?: Record<string, string> });
+}
+
+declare class Response {
+    status: number;
+    text(): Promise<string>;
+    json(): Promise<any>;
+}
+
+declare type InternetModule = {
+    fetch(request: Request): Promise<Response>;
+};

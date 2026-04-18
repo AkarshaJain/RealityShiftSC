@@ -223,3 +223,97 @@ error at runtime, tell me and we'll enable it manually.
 
 When pinch produces a `Scan #N / WxH @ Ts` line on real Spectacles, stop and tell me —
 we move to Layer 3 (backend) so we have somewhere for Layer 4 to actually send this frame.
+
+---
+
+## Layer 4a — Lens reaches the backend (GET /health)
+
+Goal: on Spectacles, the lens calls your local Node backend over the LAN and
+displays "Backend: OK". No analysis yet — just proving the glasses can talk to
+your PC.
+
+### 4a.0  Prerequisites
+
+- Your backend is running (`npm run dev` in `backend/`) and `GET /health`
+  returned `status:"ok"` earlier.
+- Your Spectacles are on the **same Wi-Fi network** as your PC.
+- Your PC's LAN IP is **`10.25.33.161`** (Wi-Fi). If your network changes,
+  rerun `Get-NetIPAddress -AddressFamily IPv4` to confirm.
+
+### 4a.1  Enable Experimental APIs (one time)
+
+Spectacles blocks plain HTTP to non-HTTPS endpoints by default. To call your
+`http://10.25.33.161:3000` backend during development, enable Experimental APIs.
+
+1. Lens Studio menu: **Project → Project Settings**
+   (or `Ctrl+,` depending on version — look for a gear icon on the toolbar).
+2. Find **Experimental APIs** → turn it **ON**.
+3. If there's a **Spectacles** section with an "Internet Access" or
+   "Allow HTTP" toggle, turn that **ON** too.
+4. Save the project.
+
+> Reminder: lenses using Experimental APIs cannot be published. That's fine
+> for development. Layer 6 switches to HTTPS so we can publish.
+
+### 4a.2  Add an InternetModule to the scene
+
+1. In the **Asset Browser**, click **`+`** → **Internet Module**.
+   - This creates a scene asset named `Internet Module`.
+2. No scene-object wiring needed for the asset itself — it's a global module.
+
+### 4a.3  Paste the updated script
+
+1. Copy all contents of `lens/scripts-source/ShelfSenseApp.ts`.
+2. In Lens Studio, open the `ShelfSenseApp` asset, select all, delete, paste,
+   **Ctrl+S**. Expect `TypeScript compilation succeeded!` in the Logger.
+
+### 4a.4  Wire the two new Inspector fields
+
+Select `StatusText` in the Objects panel. In the Inspector, the Script
+component now shows **two new slots** in addition to Status Text:
+
+- **Internet Module** — drag the `Internet Module` asset (Asset Browser) here.
+- **Backend Url** — text field. Set to exactly:
+  `http://10.25.33.161:3000`
+
+Leave **Status Text** set to the `StatusText` SceneObject (unchanged from Layer 1).
+
+### 4a.5  Push to Spectacles and read the glasses
+
+> Lens Studio's Preview panel cannot reach your LAN the same way Spectacles
+> does; this step only reliably works on hardware.
+
+1. **Device → Send to Spectacles**.
+2. Put them on. Within 1–2 seconds the text should read:
+   ```
+   Backend: OK (demo)
+   Camera: ready
+   Pinch to scan
+   ```
+3. Logger (Lens Studio) should show:
+   `[ShelfSense] probing http://10.25.33.161:3000/health`
+   `[ShelfSense] backend ok service=shelfsense-backend demo=true`
+4. Your backend terminal should log:
+   `[INFO] [http] GET /health`
+   …triggered by the glasses themselves, not you.
+
+### Success criteria (4a)
+
+- [ ] Lens compiles with no errors.
+- [ ] On Spectacles, the status text shows `Backend: OK (demo)`.
+- [ ] Backend terminal logs a `GET /health` hit caused by the glasses.
+- [ ] Existing pinch + camera behavior still works (Scan counter updates).
+
+### Common failures
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Backend: unreachable` on glasses | Spectacles not on same Wi-Fi / firewall blocks | 1. check Wi-Fi SSID matches PC. 2. in PowerShell as admin: `New-NetFirewallRule -DisplayName "ShelfSense 3000" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3000` |
+| `Backend: HTTP 0` or stuck on `Backend: ...` | Experimental APIs still off, or HTTP blocked | redo step 4a.1 |
+| `ERROR: internetModule is not assigned` in Logger | Step 4a.4 missed | drag `Internet Module` asset into the script's Internet Module slot |
+| Compile error mentioning `Request` or `fetch` | Lens Studio < 5.3 | unlikely — you're on 5.15.4. If somehow it happens, restart Lens Studio. |
+| Glasses say OK but backend terminal never logs the hit | The glasses are reaching a different service | double-check `Backend Url` is your PC's LAN IP, not a placeholder |
+
+When the status text on the glasses shows `Backend: OK (demo)` and your
+backend terminal logs the matching `GET /health`, stop and tell me — we move
+to Layer 4b: pinch sends a real analyze-label POST and we render the verdict.

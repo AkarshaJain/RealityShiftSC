@@ -1,24 +1,37 @@
 // ShelfSenseApp.ts
-// Layer 2b — Live camera frames + capture on pinch.
+// Layer 4a — Lens talks to backend for the first time.
 //
 // What this proves:
-//   1. The lens subscribes to the real Spectacles world-facing camera.
-//   2. Live frames are flowing (onNewFrame fires continuously).
-//   3. On pinch, we sample the *current* live frame (timestamp + dimensions)
-//      and stash a reference for Layer 4 (send to backend).
+//   - The Spectacles lens reaches our local Node backend over the LAN.
+//   - `GET /health` returns JSON and we can parse it.
+//   - The world-space text reports the connection state.
 //
-// Docs we are relying on (not guessing):
+// On top of Layer 2b (pinch + live camera). Nothing in Layer 2 is removed.
+//
+// Requires (in Lens Studio):
+//   1. Project Settings → "Experimental APIs" enabled.
+//   2. An `InternetModule` asset created in the scene and dragged into the
+//      Inspector slot `Internet Module` on this script.
+//   3. The `Backend Url` field in the Inspector set to your PC's LAN address,
+//      e.g. http://10.25.33.161:3000  (NOT localhost — the glasses are a
+//      separate device on the Wi-Fi).
+//   4. Spectacles on the same Wi-Fi as your PC.
+//
+// Docs:
+//   - https://docs.snap.com/spectacles/about-spectacles-features/apis/internet-access
 //   - https://developers.snap.com/spectacles/about-spectacles-features/apis/camera-module
-//   - https://developers.snap.com/lens-studio/api/lens-scripting/classes/Built-In.CameraFrame.html
-//   - https://developers.snap.com/lens-studio/api/lens-scripting/classes/Built-In.CameraTextureProvider.html
 //   - https://developers.snap.com/spectacles/about-spectacles-features/apis/gesture-module
-//
-// IMPORTANT: createCameraRequest() MUST be called on OnStartEvent, not onAwake.
 
 @component
 export class ShelfSenseApp extends BaseScriptComponent {
     @input
     statusText: SceneObject;
+
+    @input
+    internetModule: InternetModule;
+
+    @input
+    backendUrl: string = "http://10.25.33.161:3000";
 
     private gestureModule: GestureModule = require("LensStudio:GestureModule");
     private cameraModule: any = require("LensStudio:CameraModule");
@@ -32,7 +45,9 @@ export class ShelfSenseApp extends BaseScriptComponent {
     private lastFrameTs: number = 0;
     private pinchCount: number = 0;
 
-    // A snapshot of the most recent frame — Layer 4 will send this to the backend.
+    private backendStatus: "booting" | "ok" | "down" = "booting";
+    private backendDemoMode: boolean | null = null;
+
     private lastCapture: {
         pinchId: number;
         timestampSeconds: number;
@@ -57,23 +72,51 @@ export class ShelfSenseApp extends BaseScriptComponent {
             return;
         }
 
-        this.setText("ShelfSense: Booting camera...");
+        this.refreshText("Booting...");
 
-        // Pinch is safe to wire on Awake.
         this.subscribePinch(GestureModule.HandType.Right, "R");
         this.subscribePinch(GestureModule.HandType.Left, "L");
 
-        // Camera request MUST go on OnStartEvent per the docs.
         this.createEvent("OnStartEvent").bind(() => {
             this.startCamera();
+            this.probeBackend();
         });
+    }
+
+    private async probeBackend(): Promise<void> {
+        if (!this.internetModule) {
+            this.backendStatus = "down";
+            this.refreshText("Internet module not bound");
+            print("[ShelfSense] ERROR: internetModule is not assigned in the Inspector.");
+            return;
+        }
+        const url = this.backendUrl + "/health";
+        print("[ShelfSense] probing " + url);
+        try {
+            const req = new Request(url, { method: "GET" });
+            const resp = await this.internetModule.fetch(req);
+            if (resp.status !== 200) {
+                this.backendStatus = "down";
+                this.refreshText("Backend: HTTP " + resp.status);
+                print("[ShelfSense] backend non-200: " + resp.status);
+                return;
+            }
+            const data: any = await resp.json();
+            this.backendStatus = "ok";
+            this.backendDemoMode = Boolean(data && data.demoMode);
+            print("[ShelfSense] backend ok service=" + data.service + " demo=" + this.backendDemoMode);
+            this.refreshText(null);
+        } catch (e) {
+            this.backendStatus = "down";
+            this.refreshText("Backend: unreachable");
+            print("[ShelfSense] backend error: " + e);
+        }
     }
 
     private startCamera(): void {
         try {
             const req = CameraModule.createCameraRequest();
             req.cameraId = CameraModule.CameraId.Left_Color;
-            // Keep frames modest — fast to process and fast to upload later.
             req.imageSmallerDimension = 512;
 
             this.cameraTexture = this.cameraModule.requestCamera(req);
@@ -83,11 +126,11 @@ export class ShelfSenseApp extends BaseScriptComponent {
                 this.onNewFrame(frame);
             });
 
-            this.setText("Camera ready.\nPinch to scan");
             print("[ShelfSense] camera requested (Left_Color, 512)");
+            this.refreshText(null);
         } catch (e) {
             print("[ShelfSense] ERROR starting camera: " + e);
-            this.setText("Camera error.\nSee Logger.");
+            this.refreshText("Camera error");
         }
     }
 
@@ -96,8 +139,6 @@ export class ShelfSenseApp extends BaseScriptComponent {
         if (frame && typeof frame.timestampSeconds === "number") {
             this.lastFrameTs = frame.timestampSeconds;
         }
-        // Every ~60 frames (~1s @ 60fps), heartbeat the Logger so we can see it's alive
-        // without spamming. Do NOT update the text every frame — that's expensive.
         if (this.frameCount % 60 === 0) {
             print("[ShelfSense] frames=" + this.frameCount + " lastTs=" + this.lastFrameTs.toFixed(2));
         }
@@ -113,8 +154,8 @@ export class ShelfSenseApp extends BaseScriptComponent {
         this.pinchCount += 1;
 
         if (!this.cameraProvider) {
-            this.setText("Pinch " + hand + " #" + this.pinchCount + "\n(camera not ready)");
-            print("[ShelfSense] pinch " + hand + " #" + this.pinchCount + " — camera not ready");
+            this.refreshText("Pinch #" + this.pinchCount + " (camera not ready)");
+            print("[ShelfSense] pinch " + hand + " #" + this.pinchCount + " - camera not ready");
             return;
         }
 
@@ -132,19 +173,28 @@ export class ShelfSenseApp extends BaseScriptComponent {
             "[ShelfSense] captured pinch #" + this.pinchCount +
             " hand=" + hand +
             " size=" + width + "x" + height +
-            " ts=" + this.lastFrameTs.toFixed(2) +
-            " totalFrames=" + this.frameCount
+            " ts=" + this.lastFrameTs.toFixed(2)
         );
 
-        this.setText(
-            "Scan #" + this.pinchCount + " (" + hand + ")\n" +
-            width + "x" + height + " @ " + this.lastFrameTs.toFixed(1) + "s"
-        );
+        this.refreshText("Scan #" + this.pinchCount + " (" + hand + ") " + width + "x" + height);
     }
 
-    private setText(value: string): void {
-        if (this.textComponent) {
-            this.textComponent.text = value;
+    // Single place that composes the full status text from component state.
+    private refreshText(oneShotLine: string | null): void {
+        if (!this.textComponent) return;
+
+        let line1: string;
+        if (this.backendStatus === "ok") {
+            line1 = "Backend: OK" + (this.backendDemoMode ? " (demo)" : "");
+        } else if (this.backendStatus === "down") {
+            line1 = "Backend: down";
+        } else {
+            line1 = "Backend: ...";
         }
+
+        const cameraLine = this.cameraProvider ? "Camera: ready" : "Camera: booting";
+        const action = oneShotLine ?? "Pinch to scan";
+
+        this.textComponent.text = line1 + "\n" + cameraLine + "\n" + action;
     }
 }
