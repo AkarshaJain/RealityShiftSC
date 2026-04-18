@@ -24,9 +24,9 @@ and see alternatives + cart impact — all in the aisle.
 - [x] Layer 1 — Lens Studio proof of life
 - [x] Layer 2 — Live camera workflow (pinch + frame capture)
 - [x] Layer 3 — Backend local proof (3a /health · 3b profile+analyze · 3c speech+cart+meal)
-- [ ] Layer 4 — Lens ↔ backend connection
+- [~] Layer 4 — Lens ↔ backend connection (local blocked by campus Wi-Fi → jumping to Layer 6)
 - [ ] Layer 5 — Sample-image testing
-- [ ] Layer 6 — Deployment
+- [~] Layer 6 — Deployment (render.yaml added; awaiting Render.com connect)
 
 ## Principles
 - Free / open-source path is the default. Paid APIs are optional plug-ins.
