@@ -21,9 +21,9 @@ and see alternatives + cart impact — all in the aisle.
 
 ## Build progress (layer-by-layer)
 - [x] Layer 0 — Repo audit
-- [ ] Layer 1 — Lens Studio proof of life (in progress)
-- [ ] Layer 2 — Live camera workflow
-- [ ] Layer 3 — Backend local proof
+- [x] Layer 1 — Lens Studio proof of life
+- [x] Layer 2 — Live camera workflow (pinch + frame capture)
+- [ ] Layer 3 — Backend local proof (3a ✅ /health  ·  3b ⏳  ·  3c ⏳)
 - [ ] Layer 4 — Lens ↔ backend connection
 - [ ] Layer 5 — Sample-image testing
 - [ ] Layer 6 — Deployment
