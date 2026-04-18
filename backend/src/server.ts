@@ -3,6 +3,8 @@ import cors from "cors";
 import { config } from "./util/config.js";
 import { logger } from "./util/logger.js";
 import { healthRouter } from "./routes/health.js";
+import { profileRouter } from "./routes/profile.js";
+import { analyzeRouter } from "./routes/analyze.js";
 
 const app = express();
 
@@ -16,6 +18,8 @@ app.use((req, _res, next) => {
 });
 
 app.use(healthRouter);
+app.use(profileRouter);
+app.use(analyzeRouter);
 
 app.get("/", (_req, res) => {
     res.json({
