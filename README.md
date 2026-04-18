@@ -23,7 +23,7 @@ and see alternatives + cart impact — all in the aisle.
 - [x] Layer 0 — Repo audit
 - [x] Layer 1 — Lens Studio proof of life
 - [x] Layer 2 — Live camera workflow (pinch + frame capture)
-- [ ] Layer 3 — Backend local proof (3a ✅ /health  ·  3b ⏳  ·  3c ⏳)
+- [x] Layer 3 — Backend local proof (3a /health · 3b profile+analyze · 3c speech+cart+meal)
 - [ ] Layer 4 — Lens ↔ backend connection
 - [ ] Layer 5 — Sample-image testing
 - [ ] Layer 6 — Deployment

@@ -44,9 +44,10 @@ Stop the server with **Ctrl+C**.
 | ✅     | POST   | `/api/profile/parse`        | Lab report text → structured health profile   |
 | ✅     | GET    | `/api/profile/demo/:id`     | Demo profile (`diabetic`, `allergy`, `budget`)|
 | ✅     | POST   | `/api/analyze-label`        | Label text + profile → Safe/Caution/Avoid     |
-| ⏳     | POST   | `/api/speech`               | Verdict text → audio / fallback               |
-| ⏳     | POST   | `/api/cart/update`          | Running cart summary + health trend           |
-| ⏳     | POST   | `/api/meal-plan`            | Budget meal ideas from profile + cart         |
+| ✅     | POST   | `/api/speech`               | Verdict text → `client_tts` payload + SSML    |
+| ✅     | POST   | `/api/cart/update`          | Append item, return summary + trend + alerts  |
+| ✅     | GET    | `/api/cart/:sessionId`      | Inspect cart state                            |
+| ✅     | POST   | `/api/meal-plan`            | 3 diversified budget meal ideas               |
 | ⏳     | —      | image_base64 input for `/api/analyze-label` (Tesseract OCR wired in Layer 5) |
 
 ### Verify Layer 3b (PowerShell)

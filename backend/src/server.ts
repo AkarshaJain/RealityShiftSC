@@ -5,6 +5,9 @@ import { logger } from "./util/logger.js";
 import { healthRouter } from "./routes/health.js";
 import { profileRouter } from "./routes/profile.js";
 import { analyzeRouter } from "./routes/analyze.js";
+import { speechRouter } from "./routes/speech.js";
+import { cartRouter } from "./routes/cart.js";
+import { mealPlanRouter } from "./routes/mealPlan.js";
 
 const app = express();
 
@@ -20,6 +23,9 @@ app.use((req, _res, next) => {
 app.use(healthRouter);
 app.use(profileRouter);
 app.use(analyzeRouter);
+app.use(speechRouter);
+app.use(cartRouter);
+app.use(mealPlanRouter);
 
 app.get("/", (_req, res) => {
     res.json({
