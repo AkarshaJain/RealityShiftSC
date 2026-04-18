@@ -1,8 +1,9 @@
 // ShelfSenseApp.ts
 // Layer 4a — Lens talks to backend for the first time.
+// Layer 6a — backend now lives on Render.com over public HTTPS.
 //
 // What this proves:
-//   - The Spectacles lens reaches our local Node backend over the LAN.
+//   - The Spectacles lens reaches our deployed Node backend over the open internet.
 //   - `GET /health` returns JSON and we can parse it.
 //   - The world-space text reports the connection state.
 //
@@ -12,10 +13,15 @@
 //   1. Project Settings → "Experimental APIs" enabled.
 //   2. An `InternetModule` asset created in the scene and dragged into the
 //      Inspector slot `Internet Module` on this script.
-//   3. The `Backend Url` field in the Inspector set to your PC's LAN address,
-//      e.g. http://10.25.33.161:3000  (NOT localhost — the glasses are a
-//      separate device on the Wi-Fi).
-//   4. Spectacles on the same Wi-Fi as your PC.
+//   3. The `Backend Url` field in the Inspector set to the Render URL
+//      (default below). No LAN, no firewall, no localhost — the glasses hit
+//      the public HTTPS endpoint directly.
+//   4. Spectacles on any Wi-Fi with internet.
+//
+// Note on free-tier cold start:
+//   Render sleeps the service after ~15 min idle. The first /health probe
+//   after idle can take ~30 sec while the container wakes. Subsequent calls
+//   are instant. We'll surface a "warming up..." state in a later layer.
 //
 // Docs:
 //   - https://docs.snap.com/spectacles/about-spectacles-features/apis/internet-access
@@ -31,7 +37,7 @@ export class ShelfSenseApp extends BaseScriptComponent {
     internetModule: InternetModule;
 
     @input
-    backendUrl: string = "http://10.25.33.161:3000";
+    backendUrl: string = "https://shelfsense-backend-o79b.onrender.com";
 
     private gestureModule: GestureModule = require("LensStudio:GestureModule");
     private cameraModule: any = require("LensStudio:CameraModule");
