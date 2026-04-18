@@ -1,0 +1,38 @@
+# --- OS / editor junk ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# --- Node / backend ---
+node_modules/
+dist/
+build/
+coverage/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Environment / secrets (never commit) ---
+.env
+.env.*
+!.env.example
+
+# --- Databases (local dev) ---
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Lens Studio generated artifacts ---
+# Lens Studio regenerates these; they're binary and bloat git.
+# The project's .lsproj, .scene, and Assets/*.ts ARE kept.
+lens/**/Cache/
+lens/**/Temp/
+lens/**/Logs/
+lens/**/.DS_Store
+lens/**/*.lsproj.bak
+lens/**/Exports/
