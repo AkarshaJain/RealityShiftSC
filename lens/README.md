@@ -151,3 +151,75 @@ Lens Studio 5.x Preview can simulate Spectacles hand input.
 | Text never changed from `ShelfSense: Ready` | Script didn't compile — check Logger for red errors, fix, save. |
 
 When the counter increments on pinch, stop and tell me — we move to Layer 2b (real camera frames).
+
+---
+
+## Layer 2b — Live camera frames + capture on pinch
+
+Goal:
+- Subscribe to the real Spectacles world-facing camera (`Left_Color`).
+- Prove frames are flowing.
+- On pinch, snapshot the current live frame's dimensions + timestamp and log it.
+
+No backend yet. No image upload yet. That is Layer 4.
+
+### 2b.1  Paste the updated script
+
+1. Open `lens/scripts-source/ShelfSenseApp.ts`, copy all.
+2. In Lens Studio, open your `ShelfSenseApp` asset, select all, delete, paste, **Ctrl+S**.
+3. Logger must show: `TypeScript compilation succeeded!`
+
+### 2b.2  Camera permission — first run only
+
+The first time a lens with `CameraModule` is pushed to Spectacles (or run in
+Preview with camera simulation), Lens Studio / Spectacles may prompt for
+**camera access**. Approve it. If you don't see a prompt, that's fine — it
+means the project already has camera permission from the template.
+
+You generally do **not** need to touch Project Settings — `CameraModule` is
+granted by default in the Spectacles project template. If you hit a privacy
+error at runtime, tell me and we'll enable it manually.
+
+### 2b.3  Test in Preview
+
+1. Press **▶ Preview Lens**.
+2. Expected text sequence (watch the Preview panel):
+   - `ShelfSense: Booting camera...`  (for a split second)
+   - `Camera ready.` / `Pinch to scan`
+3. Watch the Logger — every ~1 second you should see a heartbeat:
+   `[ShelfSense] frames=60 lastTs=...`
+   `[ShelfSense] frames=120 lastTs=...`
+4. If Preview's camera simulation isn't providing frames, the heartbeat will
+   not appear. That's a Preview limitation, **not a code bug** — go to 2b.4.
+
+### 2b.4  Test on Spectacles (the real test)
+
+1. **Device → Send to Spectacles**.
+2. Put them on. You should see `Camera ready. / Pinch to scan`.
+3. Look at any real object (a bottle, a cereal box — anything).
+4. **Pinch**. The text should update to something like:
+   `Scan #1 (R)`
+   `512x384 @ 12.3s`
+5. Each subsequent pinch updates the numbers.
+
+### Success criteria (2b)
+
+- [ ] `TypeScript compilation succeeded!` in Logger after paste.
+- [ ] Text transitions: `Booting camera...` → `Camera ready.` within 1–2 s.
+- [ ] Logger shows periodic `frames=N lastTs=...` heartbeats (on hardware or
+      if Preview has camera sim enabled).
+- [ ] On pinch, Logger shows `captured pinch #N ... size=WxH ts=...`.
+- [ ] The status text shows scan count, dimensions, and timestamp.
+
+### Common failures
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Text stuck on `Booting camera...` | `OnStartEvent` never fired, or `createCameraRequest` threw | Check Logger for `ERROR starting camera:` and paste it to me |
+| `Camera error. See Logger.` text | Exception in `startCamera` | Read the printed error — often a privacy/permission issue |
+| `(camera not ready)` on pinch | You pinched before `OnStartEvent` completed | Wait 1–2 s after text says `Camera ready.`, then pinch |
+| Compile error `createEvent is not a function` | Paste incomplete | Re-paste the whole file |
+| `imageSmallerDimension` complaint | Your Lens Studio is older than 5.x | You have 5.15 — shouldn't happen; remove that one line if it does |
+
+When pinch produces a `Scan #N / WxH @ Ts` line on real Spectacles, stop and tell me —
+we move to Layer 3 (backend) so we have somewhere for Layer 4 to actually send this frame.

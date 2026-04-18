@@ -12,7 +12,7 @@ declare function print(message: any): void;
 declare function require(name: string): any;
 
 declare class BaseScriptComponent {
-    createEvent(name: string): any;
+    createEvent(name: string): { bind: (cb: () => void) => void };
 }
 
 declare class SceneObject {
