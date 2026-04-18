@@ -1,17 +1,21 @@
 // ShelfSenseApp.ts
-// Layer 1 — Proof of life.
-// Minimal Lens Studio 5.x component for Spectacles.
-// Only responsibility: show "ShelfSense: Ready" on a Text SceneObject
-// and print "[ShelfSense] alive" to the Logger.
+// Layer 2a — Pinch detection.
+// Still no camera, still no backend. We only prove that:
+//   - The script runs on Spectacles.
+//   - A pinch from either hand is detected.
+//   - The status text reflects the pinch count.
 //
-// No camera. No backend. No AI yet. That's the point of Layer 1.
+// Camera frame capture arrives in Layer 2b. Don't add it yet.
 
 @component
 export class ShelfSenseApp extends BaseScriptComponent {
-    // Drag a SceneObject that has a Text component into this slot
-    // from the Inspector. (See lens/README.md step 1.3.7.)
+    // Drag your StatusText (Text3D) SceneObject into this slot in the Inspector.
     @input
     statusText: SceneObject;
+
+    private gestureModule: GestureModule = require("LensStudio:GestureModule");
+    private textComponent: any = null;
+    private pinchCount: number = 0;
 
     onAwake(): void {
         print("[ShelfSense] alive");
@@ -21,17 +25,41 @@ export class ShelfSenseApp extends BaseScriptComponent {
             return;
         }
 
-        // Try Text3D first (world-space text, what we want on Spectacles),
-        // then fall back to 2D Text if the user picked Screen Text instead.
-        let textComponent: any =
+        // Text3D first (Spectacles-friendly), 2D Text as fallback.
+        this.textComponent =
             this.statusText.getComponent("Component.Text3D") ||
             this.statusText.getComponent("Component.Text");
 
-        if (!textComponent) {
+        if (!this.textComponent) {
             print("[ShelfSense] ERROR: assigned SceneObject has no Text or Text3D component.");
             return;
         }
 
-        textComponent.text = "ShelfSense: Ready";
+        this.setText("ShelfSense: Ready\nPinch to scan");
+
+        this.subscribePinch(GestureModule.HandType.Right, "R");
+        this.subscribePinch(GestureModule.HandType.Left, "L");
+    }
+
+    private subscribePinch(hand: GestureModule.HandType, label: string): void {
+        // getPinchDownEvent fires once per thumb+index pinch on the given hand.
+        // See: https://developers.snap.com/spectacles/about-spectacles-features/apis/gesture-module
+        this.gestureModule.getPinchDownEvent(hand).add(() => {
+            this.onPinch(label);
+        });
+    }
+
+    private onPinch(hand: string): void {
+        this.pinchCount += 1;
+        print("[ShelfSense] pinch " + hand + " #" + this.pinchCount);
+        this.setText(
+            "Pinch " + hand + " #" + this.pinchCount + "\n(scanning — stub)"
+        );
+    }
+
+    private setText(value: string): void {
+        if (this.textComponent) {
+            this.textComponent.text = value;
+        }
     }
 }

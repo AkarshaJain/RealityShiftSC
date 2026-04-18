@@ -90,3 +90,64 @@ for our TypeScript. You copy its contents into Lens Studio.
   you or too far, move it to `(0, 0, -60)` in world space.
 
 When all four success boxes tick, stop and tell me — we move to Layer 2.
+
+---
+
+## Layer 2a — Pinch detection
+
+Goal: detect a pinch on Spectacles and update the status text. No camera yet.
+
+### 2a.1  Update the script
+
+1. The repo's `lens/scripts-source/ShelfSenseApp.ts` has been updated.
+2. Open that file and copy its entire contents.
+3. In Lens Studio, open your `ShelfSenseApp` asset (double-click it in the
+   Asset Browser) and paste the new contents over the old.
+4. **Ctrl+S** to save. The Logger should show:
+   `TypeScript compilation succeeded!`
+   If it shows errors, the most common cause is a stale file — select all,
+   delete, paste again.
+
+### 2a.2  No scene changes needed
+
+Good news: the `StatusText` SceneObject and the Script component you wired
+in Layer 1 are still exactly what this step needs. Nothing to rewire.
+
+### 2a.3  Test pinch in the Preview panel
+
+Lens Studio 5.x Preview can simulate Spectacles hand input.
+
+1. Press **▶ Preview Lens**. The status text should read:
+   `ShelfSense: Ready` / `Pinch to scan` (two lines).
+2. At the bottom-right of the Preview panel there is a small **hand icon**
+   (Hand Tracking simulation). Click it to open hand-sim options, or click
+   directly on the hand preview cursor in the preview area to trigger a pinch.
+   - If you don't see a hand simulator, skip to 2a.4 and test on hardware.
+
+### 2a.4  Test on real Spectacles (the most reliable path)
+
+1. Put on the Spectacles.
+2. Look at the status text floating in front of you.
+3. Hold your hand up in view and **pinch** (thumb tip to index tip).
+4. Each pinch should:
+   - change the text to `Pinch R #1` (or `Pinch L #1`) / `(scanning — stub)`
+   - increment the counter on every subsequent pinch
+   - print `[ShelfSense] pinch R #N` in the Logger
+
+### Success criteria (2a)
+
+- [ ] `TypeScript compilation succeeded!` in Logger after paste.
+- [ ] In Preview or on Spectacles, status text initially shows
+      `ShelfSense: Ready / Pinch to scan`.
+- [ ] Pinching increments the counter in the text and logs `[ShelfSense] pinch ...`.
+- [ ] Both hands work (optional — left or right is fine for Layer 2a).
+
+### Common failures
+
+| Symptom | Fix |
+|---|---|
+| Logger: `Cannot find name 'GestureModule'` | You pasted the old Layer 1 file. Re-copy `ShelfSenseApp.ts` from `lens/scripts-source/`. |
+| No errors, but pinch doesn't register | Lens Studio Preview hand-sim wasn't active. Test on hardware; or click the hand preview in the Preview panel to fire a pinch. |
+| Text never changed from `ShelfSense: Ready` | Script didn't compile — check Logger for red errors, fix, save. |
+
+When the counter increments on pinch, stop and tell me — we move to Layer 2b (real camera frames).
