@@ -86,8 +86,18 @@ export class ShelfSenseApp extends BaseScriptComponent {
 
         this.refreshText("Booting...");
 
-        this.subscribePinch(GestureModule.HandType.Right, "R");
-        this.subscribePinch(GestureModule.HandType.Left, "L");
+        // GestureModule.HandType may be undefined in Lens Studio's editor preview
+        // (it's only populated on-device). Guard so editor reloads don't throw.
+        if (
+            typeof GestureModule !== "undefined" &&
+            (GestureModule as any).HandType &&
+            this.gestureModule
+        ) {
+            this.subscribePinch(GestureModule.HandType.Right, "R");
+            this.subscribePinch(GestureModule.HandType.Left, "L");
+        } else {
+            print("[ShelfSense] GestureModule unavailable (editor preview?) - skipping pinch bindings");
+        }
 
         this.createEvent("OnStartEvent").bind(() => {
             this.startCamera();
