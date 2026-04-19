@@ -10,6 +10,7 @@ import { config } from "../util/config.js";
 import { logger } from "../util/logger.js";
 import {
     ocrImage,
+    OcrNotConfiguredError,
     OcrProviderError,
 } from "../services/ocr.js";
 
@@ -51,6 +52,11 @@ analyzeRouter.post("/api/analyze-label", async (req, res) => {
     // a clear setup message (no silent fake).
     let ocrText = body.ocr_text ?? "";
     let ocrMeta: { provider: string; ms: number; chars: number; warning?: string } | null = null;
+    // When the Vision key is missing but the client sent an image, we fall
+    // back to a labeled demo so the lens still renders a real verdict UI.
+    // The response includes `source: "demo-no-ocr"` so the glasses can show
+    // a clear "DEMO" indicator — no silent fakes.
+    let demoFallbackOcr = false;
 
     if (!ocrText && body.image_base64) {
         try {
@@ -63,16 +69,26 @@ analyzeRouter.post("/api/analyze-label", async (req, res) => {
                 warning: result.warning,
             };
         } catch (e) {
-            if (e instanceof OcrProviderError) {
+            if (e instanceof OcrNotConfiguredError) {
+                // Graceful degradation: keep the product visible. The lens
+                // will still display a verdict, just labeled DEMO.
+                logger.warn("analyze", "OCR key missing - falling back to demo text", {
+                    imageBytes: body.image_base64.length,
+                });
+                ocrText =
+                    "Sugar, high fructose corn syrup, enriched wheat flour, " +
+                    "partially hydrogenated soybean oil, salt, artificial flavors.";
+                demoFallbackOcr = true;
+            } else if (e instanceof OcrProviderError) {
                 return res.status(502).json({
                     error: "ocr_provider_error",
-                    provider: e.provider,
                     message: e.message,
                 });
+            } else {
+                const msg = e instanceof Error ? e.message : String(e);
+                logger.error("analyze", "unexpected OCR failure", { msg });
+                return res.status(500).json({ error: "ocr_failed", message: msg });
             }
-            const msg = e instanceof Error ? e.message : String(e);
-            logger.error("analyze", "unexpected OCR failure", { msg });
-            return res.status(500).json({ error: "ocr_failed", message: msg });
         }
     }
 
@@ -108,7 +124,7 @@ analyzeRouter.post("/api/analyze-label", async (req, res) => {
 
     const resp: AnalyzeLabelResponse = {
         ...core,
-        source: "heuristic",
+        source: demoFallbackOcr ? "demo-no-ocr" : "heuristic",
         demoMode: config.demoMode,
     };
 

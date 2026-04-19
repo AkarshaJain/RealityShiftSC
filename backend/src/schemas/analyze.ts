@@ -72,8 +72,12 @@ export const AnalyzeLabelResponseSchema = z.object({
     cart_impact: CartImpactSchema,
     meal_plan_hint: z.string(),
     // Meta — not in the original spec but critical for trust + debugging.
-    // The lens UI can show a small "demo" badge when source === "demo".
-    source: z.enum(["heuristic", "demo"]),
+    // The lens shows a "DEMO" indicator whenever source !== "heuristic".
+    //   heuristic     — real ingredients text (OCR or client-provided) ran through the analyzer
+    //   demo          — server returned labeled demo content
+    //   demo-no-ocr   — client sent an image but OCR wasn't configured; we
+    //                   substituted demo text so the UI still works
+    source: z.enum(["heuristic", "demo", "demo-no-ocr"]),
     demoMode: z.boolean(),
 });
 export type AnalyzeLabelResponse = z.infer<typeof AnalyzeLabelResponseSchema>;

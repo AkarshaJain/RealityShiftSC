@@ -57,6 +57,9 @@ export class ShelfSenseApp extends BaseScriptComponent {
 
     private backendStatus: "booting" | "probing" | "ok" | "down" = "booting";
     private backendDemoMode: boolean | null = null;
+    // null = unknown, true = real Vision API wired, false = backend is running
+    // in demo-OCR fallback (will still return verdicts, but labeled DEMO).
+    private backendOcrReady: boolean | null = null;
     private backendError: string = "";
     private probeAttempt: number = 0;
 
@@ -166,9 +169,15 @@ export class ShelfSenseApp extends BaseScriptComponent {
             this.backendStatus = "ok";
             this.backendError = "";
             this.backendDemoMode = Boolean(data && data.demoMode);
+            // /health includes ocrConfigured (added after the Vision wiring).
+            // Older backends won't have it — leave the flag as unknown.
+            if (data && typeof data.ocrConfigured === "boolean") {
+                this.backendOcrReady = data.ocrConfigured;
+            }
             print(
                 "[ShelfSense] probe OK service=" + data.service +
                 " demo=" + this.backendDemoMode +
+                " ocr=" + this.backendOcrReady +
                 " (attempt " + this.probeAttempt + ")"
             );
             this.refreshText(null);
@@ -403,11 +412,17 @@ export class ShelfSenseApp extends BaseScriptComponent {
             });
             print("[ShelfSense] scan resp status=" + resp.status);
             if (resp.status !== 200) {
-                // Try to read an error body for diagnostics; don't crash if unavailable.
+                // Surface the actual server-side error tag on the glasses. A
+                // generic "HTTP 500" is useless to debug from the couch.
                 let errBody = "";
                 try { errBody = await resp.text(); } catch (_) { errBody = ""; }
+                let errTag = "HTTP " + resp.status;
+                try {
+                    const parsed: any = JSON.parse(errBody);
+                    if (parsed && parsed.error) errTag += " " + String(parsed.error);
+                } catch (_) { /* keep default */ }
                 this.scanStatus = "fail";
-                this.scanError = "HTTP " + resp.status;
+                this.scanError = errTag;
                 print("[ShelfSense] scan non-200 body=" + errBody.substring(0, 200));
                 this.refreshText(null);
                 return;
@@ -429,31 +444,50 @@ export class ShelfSenseApp extends BaseScriptComponent {
 
     // Turn the backend analyze-label response into a compact AR line.
     // We follow the response shape defined in backend/src/schemas/analyze.ts.
+    // `source === "demo-no-ocr"` means the backend substituted demo text
+    // because the Vision API key isn't configured yet — we prefix the line
+    // so the user understands the result is not from their real product.
     private applyVerdict(data: any): void {
         const verdict: string = data && data.verdict ? String(data.verdict) : "Unknown";
         const reason: string =
             data && data.reason ? String(data.reason) :
             data && Array.isArray(data.flags) && data.flags.length > 0 ? String(data.flags[0]) :
             "";
-        const short = reason.length > 64 ? reason.substring(0, 61) + "..." : reason;
+        const src: string = data && data.source ? String(data.source) : "heuristic";
+        const isDemo = src !== "heuristic";
+        // Also update the cached OCR-ready flag from the actual scan outcome.
+        // If the backend tells us it fell back to demo, surface it everywhere.
+        if (src === "demo-no-ocr") {
+            this.backendOcrReady = false;
+        } else if (src === "heuristic") {
+            this.backendOcrReady = true;
+        }
+        const short = reason.length > 60 ? reason.substring(0, 57) + "..." : reason;
         this.scanStatus = "ok";
-        this.scanVerdictLine = short ? verdict.toUpperCase() + " - " + short : verdict.toUpperCase();
+        const prefix = isDemo ? "[DEMO] " : "";
+        this.scanVerdictLine = short
+            ? prefix + verdict.toUpperCase() + " - " + short
+            : prefix + verdict.toUpperCase();
         print(
             "[ShelfSense] verdict=" + verdict +
+            " source=" + src +
             " reason=" + reason.substring(0, 120)
         );
     }
 
     // Composes the full 3-line status text.
-    //   line 1: backend connection indicator (from /health probe)
-    //   line 2: camera state
+    //   line 1: backend connection indicator + OCR readiness (from /health).
+    //   line 2: camera state.
     //   line 3: scan state — either a one-shot event, or the most recent verdict.
     private refreshText(oneShotLine: string | null): void {
         if (!this.textComponent) return;
 
         let line1: string;
         if (this.backendStatus === "ok") {
-            line1 = "Backend: OK" + (this.backendDemoMode ? " (demo)" : "");
+            let ocrTag = "";
+            if (this.backendOcrReady === true) ocrTag = " | OCR: ready";
+            else if (this.backendOcrReady === false) ocrTag = " | OCR: demo-mode";
+            line1 = "Backend: OK" + (this.backendDemoMode ? " (demo)" : "") + ocrTag;
         } else if (this.backendStatus === "probing") {
             line1 = "Backend: probing " + this.probeAttempt + "/" + ShelfSenseApp.MAX_PROBE_ATTEMPTS;
         } else if (this.backendStatus === "down") {
