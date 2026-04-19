@@ -161,7 +161,19 @@ export class ShelfSenseApp extends BaseScriptComponent {
                 " (attempt " + this.probeAttempt + ")"
             );
             if (resp.status !== 200) {
-                this.backendError = "HTTP " + resp.status;
+                // HTTP 0 is NOT a real HTTP status. It means the Spectacles
+                // platform blocked the request before it left the device —
+                // almost always because the lens doesn't have the Internet
+                // permission granted. Surface that as an actionable hint.
+                if (resp.status === 0) {
+                    this.backendError = "blocked - enable Extended Permissions in Spectacles app";
+                    await ShelfSenseApp.logBlockedResp(resp, "probe");
+                } else {
+                    let errBody = "";
+                    try { errBody = await resp.text(); } catch (_) { errBody = ""; }
+                    this.backendError = "HTTP " + resp.status + (errBody ? " " + errBody.substring(0, 60) : "");
+                    print("[ShelfSense] probe non-200 body=" + errBody.substring(0, 200));
+                }
                 this.scheduleProbeRetry();
                 return;
             }
@@ -251,6 +263,31 @@ export class ShelfSenseApp extends BaseScriptComponent {
                 }
             }
         });
+    }
+
+    // Dump everything useful we can extract from a status=0 Response, so we
+    // can distinguish "permission denied by platform" from "DNS fail" from
+    // "TLS handshake fail" etc. On Spectacles all three can surface as 0.
+    private static async logBlockedResp(resp: any, tag: string): Promise<void> {
+        try {
+            let bodyPreview = "";
+            try { bodyPreview = (await resp.text() || "").substring(0, 200); } catch (_) { bodyPreview = "(no body)"; }
+            const keys = Object.keys(resp || {}).join(",");
+            const url = (resp && (resp as any).url) ? String((resp as any).url) : "?";
+            const statusText = (resp && (resp as any).statusText) ? String((resp as any).statusText) : "";
+            print(
+                "[ShelfSense] " + tag + " BLOCKED status=0" +
+                " statusText=" + statusText +
+                " url=" + url +
+                " keys=" + keys +
+                " bodyPreview=" + bodyPreview
+            );
+            print("[ShelfSense] HINT: status=0 on Spectacles usually means Internet permission not granted.");
+            print("[ShelfSense] HINT: In Snapchat (Spectacles companion) app -> My Lenses -> this lens -> enable Extended Permissions.");
+            print("[ShelfSense] HINT: Also re-Send lens to Spectacles and accept any in-glass prompt on first launch.");
+        } catch (e) {
+            print("[ShelfSense] logBlockedResp failed: " + ShelfSenseApp.describeError(e));
+        }
     }
 
     // Extract the most informative error string possible from whatever Lens Studio
@@ -451,16 +488,23 @@ export class ShelfSenseApp extends BaseScriptComponent {
             if (resp.status !== 200) {
                 // Surface the actual server-side error tag on the glasses. A
                 // generic "HTTP 500" is useless to debug from the couch.
-                let errBody = "";
-                try { errBody = await resp.text(); } catch (_) { errBody = ""; }
-                let errTag = "HTTP " + resp.status;
-                try {
-                    const parsed: any = JSON.parse(errBody);
-                    if (parsed && parsed.error) errTag += " " + String(parsed.error);
-                } catch (_) { /* keep default */ }
+                let errTag: string;
+                if (resp.status === 0) {
+                    // Platform-level block — Extended Permissions likely off.
+                    errTag = "blocked (Ext.Perms?)";
+                    await ShelfSenseApp.logBlockedResp(resp, "scan");
+                } else {
+                    let errBody = "";
+                    try { errBody = await resp.text(); } catch (_) { errBody = ""; }
+                    errTag = "HTTP " + resp.status;
+                    try {
+                        const parsed: any = JSON.parse(errBody);
+                        if (parsed && parsed.error) errTag += " " + String(parsed.error);
+                    } catch (_) { /* keep default */ }
+                    print("[ShelfSense] scan non-200 body=" + errBody.substring(0, 200));
+                }
                 this.scanStatus = "fail";
                 this.scanError = errTag;
-                print("[ShelfSense] scan non-200 body=" + errBody.substring(0, 200));
                 this.refreshText(null);
                 return;
             }
