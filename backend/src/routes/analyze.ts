@@ -10,7 +10,6 @@ import { config } from "../util/config.js";
 import { logger } from "../util/logger.js";
 import {
     ocrImage,
-    OcrNotConfiguredError,
     OcrProviderError,
 } from "../services/ocr.js";
 
@@ -64,17 +63,10 @@ analyzeRouter.post("/api/analyze-label", async (req, res) => {
                 warning: result.warning,
             };
         } catch (e) {
-            if (e instanceof OcrNotConfiguredError) {
-                return res.status(501).json({
-                    error: "ocr_not_configured",
-                    message:
-                        "Set GOOGLE_VISION_API_KEY in the backend env to enable " +
-                        "image OCR. For now, send ocr_text directly.",
-                });
-            }
             if (e instanceof OcrProviderError) {
                 return res.status(502).json({
                     error: "ocr_provider_error",
+                    provider: e.provider,
                     message: e.message,
                 });
             }

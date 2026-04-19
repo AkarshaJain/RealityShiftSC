@@ -22,8 +22,11 @@ export const config = {
     port: envInt("PORT", 3000),
     nodeEnv: envString("NODE_ENV", "development"),
     demoMode: envBool("DEMO_MODE", true),
-    // Google Cloud Vision API key. When set, /api/analyze-label will OCR
-    // `image_base64` payloads via Vision REST. Without it, image payloads
-    // return a 501 with a clear setup message — no silent fallback.
+    // Optional upgrade: Google Cloud Vision API key. When set, the backend
+    // prefers Vision over OCR.space (better accuracy on dense labels).
     googleVisionApiKey: envString("GOOGLE_VISION_API_KEY", ""),
+    // Optional: OCR.space API key for higher rate limits. Defaults to the
+    // public "helloworld" demo key, which works out of the box but is
+    // rate-limited. Free signup at https://ocr.space/ocrapi gives 25k/month.
+    ocrSpaceApiKey: envString("OCR_SPACE_API_KEY", ""),
 };
