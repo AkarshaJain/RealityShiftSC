@@ -51,8 +51,14 @@ export class ShelfSenseApp extends BaseScriptComponent {
     private lastFrameTs: number = 0;
     private pinchCount: number = 0;
 
-    private backendStatus: "booting" | "ok" | "down" = "booting";
+    private backendStatus: "booting" | "probing" | "ok" | "down" = "booting";
     private backendDemoMode: boolean | null = null;
+    private backendError: string = "";
+    private probeAttempt: number = 0;
+
+    // Render free-tier can cold-start for up to ~30 sec. 6 * 5 sec = 30 sec budget.
+    private static readonly MAX_PROBE_ATTEMPTS: number = 6;
+    private static readonly PROBE_RETRY_SECONDS: number = 5;
 
     private lastCapture: {
         pinchId: number;
@@ -92,31 +98,60 @@ export class ShelfSenseApp extends BaseScriptComponent {
     private async probeBackend(): Promise<void> {
         if (!this.internetModule) {
             this.backendStatus = "down";
-            this.refreshText("Internet module not bound");
+            this.backendError = "module not bound";
+            this.refreshText(null);
             print("[ShelfSense] ERROR: internetModule is not assigned in the Inspector.");
             return;
         }
+
+        this.probeAttempt += 1;
+        this.backendStatus = "probing";
+        this.refreshText(null);
+
         const url = this.backendUrl + "/health";
-        print("[ShelfSense] probing " + url);
+        print("[ShelfSense] probe attempt " + this.probeAttempt + " -> " + url);
+
         try {
             const req = new Request(url, { method: "GET" });
             const resp = await this.internetModule.fetch(req);
             if (resp.status !== 200) {
-                this.backendStatus = "down";
-                this.refreshText("Backend: HTTP " + resp.status);
-                print("[ShelfSense] backend non-200: " + resp.status);
+                this.backendError = "HTTP " + resp.status;
+                print("[ShelfSense] probe non-200: " + resp.status);
+                this.scheduleProbeRetry();
                 return;
             }
             const data: any = await resp.json();
             this.backendStatus = "ok";
+            this.backendError = "";
             this.backendDemoMode = Boolean(data && data.demoMode);
-            print("[ShelfSense] backend ok service=" + data.service + " demo=" + this.backendDemoMode);
+            print(
+                "[ShelfSense] probe OK service=" + data.service +
+                " demo=" + this.backendDemoMode +
+                " (attempt " + this.probeAttempt + ")"
+            );
             this.refreshText(null);
         } catch (e) {
-            this.backendStatus = "down";
-            this.refreshText("Backend: unreachable");
-            print("[ShelfSense] backend error: " + e);
+            this.backendError = "fetch err";
+            print("[ShelfSense] probe threw: " + e);
+            this.scheduleProbeRetry();
         }
+    }
+
+    private scheduleProbeRetry(): void {
+        if (this.probeAttempt >= ShelfSenseApp.MAX_PROBE_ATTEMPTS) {
+            this.backendStatus = "down";
+            this.refreshText(null);
+            print("[ShelfSense] probe gave up after " + this.probeAttempt + " attempts");
+            return;
+        }
+        // Reflect the fact that we're still trying, with a countdown on the main line.
+        this.backendStatus = "probing";
+        this.refreshText(null);
+        const delay = this.createEvent("DelayedCallbackEvent") as any;
+        delay.bind(() => {
+            this.probeBackend();
+        });
+        delay.reset(ShelfSenseApp.PROBE_RETRY_SECONDS);
     }
 
     private startCamera(): void {
@@ -186,14 +221,19 @@ export class ShelfSenseApp extends BaseScriptComponent {
     }
 
     // Single place that composes the full status text from component state.
+    // Line 1 ALWAYS reflects backend state (and error reason) so pinch events can't hide it.
     private refreshText(oneShotLine: string | null): void {
         if (!this.textComponent) return;
 
         let line1: string;
         if (this.backendStatus === "ok") {
             line1 = "Backend: OK" + (this.backendDemoMode ? " (demo)" : "");
+        } else if (this.backendStatus === "probing") {
+            line1 = "Backend: probing " + this.probeAttempt + "/" + ShelfSenseApp.MAX_PROBE_ATTEMPTS;
         } else if (this.backendStatus === "down") {
-            line1 = "Backend: down";
+            line1 = this.backendError
+                ? "Backend: down - " + this.backendError
+                : "Backend: down";
         } else {
             line1 = "Backend: ...";
         }
