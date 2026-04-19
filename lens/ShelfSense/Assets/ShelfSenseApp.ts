@@ -189,9 +189,15 @@ export class ShelfSenseApp extends BaseScriptComponent {
         }
     }
 
+    // Encoding budget: if the device takes longer than this, we abandon the
+    // image path and fall back to the demo ingredients text so the user is
+    // never left staring at "Scanning..." forever.
+    private static readonly ENCODE_TIMEOUT_MS: number = 5000;
+
     // Wrap the callback-style Base64.encodeTextureAsync in a Promise so the
-    // scan flow can `await` it. We request JPEG at medium compression — small
-    // enough to POST cheaply on glasses Wi-Fi, still legible enough for OCR.
+    // scan flow can `await` it. JPEG at low-quality — small enough to POST
+    // cheaply on glasses Wi-Fi, still legible enough for label OCR.
+    // A timeout guards against the async callback never firing.
     //
     // Docs: https://developers.snap.com/lens-studio/api/lens-scripting/classes/Built-In.Base64.html
     private encodeCameraFrameAsJpeg(): Promise<string> {
@@ -204,10 +210,22 @@ export class ShelfSenseApp extends BaseScriptComponent {
                 reject(new Error("CompressionQuality/EncodingType enums unavailable"));
                 return;
             }
+
+            let done = false;
+            const timer = this.createEvent("DelayedCallbackEvent") as any;
+            timer.bind(() => {
+                if (done) return;
+                done = true;
+                reject(new Error("encode timeout after " + ShelfSenseApp.ENCODE_TIMEOUT_MS + "ms"));
+            });
+            timer.reset(ShelfSenseApp.ENCODE_TIMEOUT_MS / 1000);
+
             try {
                 (Base64 as any).encodeTextureAsync(
                     this.cameraTexture,
                     (b64: string) => {
+                        if (done) return;
+                        done = true;
                         if (!b64) {
                             reject(new Error("empty base64 result"));
                             return;
@@ -215,6 +233,8 @@ export class ShelfSenseApp extends BaseScriptComponent {
                         resolve(b64);
                     },
                     () => {
+                        if (done) return;
+                        done = true;
                         reject(new Error("encodeTextureAsync onFailure"));
                     },
                     (CompressionQuality as any).LowQuality ??
@@ -225,7 +245,10 @@ export class ShelfSenseApp extends BaseScriptComponent {
                         (EncodingType as any).JPEG,
                 );
             } catch (e) {
-                reject(e);
+                if (!done) {
+                    done = true;
+                    reject(e);
+                }
             }
         });
     }
@@ -298,14 +321,28 @@ export class ShelfSenseApp extends BaseScriptComponent {
     private onPinch(hand: string): void {
         this.pinchCount += 1;
 
+        // Guard: if a scan is already in-flight, ignore the new pinch instead
+        // of racing two requests and stomping scanStatus. The user can re-pinch
+        // once the verdict lands.
+        if (this.scanStatus === "sending") {
+            print("[ShelfSense] pinch " + hand + " #" + this.pinchCount + " ignored (scan in flight)");
+            return;
+        }
+
         if (!this.cameraProvider) {
             this.refreshText("Pinch #" + this.pinchCount + " (camera not ready)");
             print("[ShelfSense] pinch " + hand + " #" + this.pinchCount + " - camera not ready");
             return;
         }
 
-        const width: number = this.cameraProvider.getWidth();
-        const height: number = this.cameraProvider.getHeight();
+        let width: number = 0;
+        let height: number = 0;
+        try {
+            width = this.cameraProvider.getWidth();
+            height = this.cameraProvider.getHeight();
+        } catch (e) {
+            print("[ShelfSense] pinch " + hand + " size read failed: " + ShelfSenseApp.describeError(e));
+        }
 
         this.lastCapture = {
             pinchId: this.pinchCount,
@@ -455,12 +492,14 @@ export class ShelfSenseApp extends BaseScriptComponent {
             "";
         const src: string = data && data.source ? String(data.source) : "heuristic";
         const isDemo = src !== "heuristic";
-        // Also update the cached OCR-ready flag from the actual scan outcome.
-        // If the backend tells us it fell back to demo, surface it everywhere.
+        // Only downgrade the OCR-ready flag here: source==="demo-no-ocr" is
+        // conclusive proof the backend couldn't reach Vision. We must NOT
+        // upgrade to true on source==="heuristic", because the heuristic path
+        // also runs when the lens sent ocr_text fallback (e.g. encode failure
+        // in preview) — in that case OCR readiness is still unknown, and the
+        // authoritative answer is /health's ocrConfigured flag.
         if (src === "demo-no-ocr") {
             this.backendOcrReady = false;
-        } else if (src === "heuristic") {
-            this.backendOcrReady = true;
         }
         const short = reason.length > 60 ? reason.substring(0, 57) + "..." : reason;
         this.scanStatus = "ok";
