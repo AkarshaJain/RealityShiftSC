@@ -55,13 +55,19 @@ export class ShelfSenseApp extends BaseScriptComponent {
     private lastFrameTs: number = 0;
     private pinchCount: number = 0;
 
-    private backendStatus: "booting" | "probing" | "ok" | "down" = "booting";
+    private backendStatus: "booting" | "probing" | "ok" | "down" | "mobile-mock" = "booting";
     private backendDemoMode: boolean | null = null;
     // null = unknown, true = real Vision API wired, false = backend is running
     // in demo-OCR fallback (will still return verdicts, but labeled DEMO).
     private backendOcrReady: boolean | null = null;
     private backendError: string = "";
     private probeAttempt: number = 0;
+
+    // True when running on Mobile Snapchat, where InternetModule.fetch does
+    // not exist (per Snap docs, fetch is Spectacles/Camera-Kit only).
+    // In this mode we skip all network calls and run a small local analyzer
+    // so the pinch -> verdict UX still works for demos on the phone.
+    private mobileMockMode: boolean = false;
 
     // Render free-tier can cold-start for up to ~30 sec. 6 * 5 sec = 30 sec budget.
     private static readonly MAX_PROBE_ATTEMPTS: number = 6;
@@ -113,7 +119,8 @@ export class ShelfSenseApp extends BaseScriptComponent {
         this.refreshText("Booting...");
 
         // GestureModule.HandType may be undefined in Lens Studio's editor preview
-        // (it's only populated on-device). Guard so editor reloads don't throw.
+        // AND on Mobile Snapchat (hand tracking is Spectacles-only). Guard so
+        // editor reloads and mobile runs don't throw.
         if (
             typeof GestureModule !== "undefined" &&
             (GestureModule as any).HandType &&
@@ -122,7 +129,22 @@ export class ShelfSenseApp extends BaseScriptComponent {
             this.subscribePinch(GestureModule.HandType.Right, "R");
             this.subscribePinch(GestureModule.HandType.Left, "L");
         } else {
-            print("[ShelfSense] GestureModule unavailable (editor preview?) - skipping pinch bindings");
+            print("[ShelfSense] GestureModule unavailable (editor/mobile) - skipping pinch bindings");
+        }
+
+        // Tap-to-scan fallback. On Spectacles pinch is the primary trigger; on
+        // Mobile Snapchat there is no pinch so we rely on a screen tap. Binding
+        // TouchStartEvent on both platforms is harmless: on Spectacles it rarely
+        // fires and the scanStatus==="sending" guard in onPinch suppresses
+        // duplicates.
+        try {
+            const touch = this.createEvent("TouchStartEvent") as any;
+            touch.bind(() => {
+                this.onPinch("tap");
+            });
+            print("[ShelfSense] tap-to-scan handler registered");
+        } catch (e) {
+            print("[ShelfSense] TouchStartEvent unavailable: " + ShelfSenseApp.describeError(e));
         }
 
         this.createEvent("OnStartEvent").bind(() => {
@@ -137,6 +159,24 @@ export class ShelfSenseApp extends BaseScriptComponent {
             this.backendError = "module not bound";
             this.refreshText(null);
             print("[ShelfSense] ERROR: internetModule is not assigned in the Inspector.");
+            return;
+        }
+
+        // Mobile Snapchat ships an InternetModule object but without fetch().
+        // Detect that capability gap once, switch to local-mock mode, and stop
+        // retrying — there is nothing to retry, the runtime simply cannot
+        // reach external HTTP. On Spectacles fetch exists and this branch is
+        // never taken.
+        if (typeof (this.internetModule as any).fetch !== "function") {
+            this.mobileMockMode = true;
+            this.backendStatus = "mobile-mock";
+            this.backendError = "";
+            print(
+                "[ShelfSense] InternetModule.fetch not available on this runtime " +
+                "(Mobile Snapchat?). Switching to local-mock mode — pinch will " +
+                "produce a client-side verdict without any network call."
+            );
+            this.refreshText(null);
             return;
         }
 
@@ -290,6 +330,51 @@ export class ShelfSenseApp extends BaseScriptComponent {
         }
     }
 
+    // Tiny client-side analyzer used only in Mobile Snap mock mode. Intentionally
+    // conservative and keyword-based — this is NOT the real analyzer. The real
+    // analyzer runs on the backend (backend/src/services/analyzer.ts) against
+    // the full typed HealthProfile. We just need a plausible verdict on-device
+    // so the UX demos correctly when the runtime can't reach the backend.
+    private static localMockVerdict(
+        ocrText: string,
+        profileId: string
+    ): { verdict: "Safe" | "Caution" | "Avoid"; reason: string; flags: string[] } {
+        const t = (ocrText || "").toLowerCase();
+        const hits: string[] = [];
+        const diabeticTriggers = [
+            "sugar", "high fructose", "hfcs", "glucose syrup", "dextrose",
+            "maltodextrin", "syrup",
+        ];
+        const allergyTriggers = ["peanut", "tree nut", "milk", "soy", "wheat", "gluten", "egg"];
+        const hypertensionTriggers = ["salt", "sodium"];
+        const fatTriggers = ["hydrogenated", "trans fat", "palm oil"];
+
+        for (const k of diabeticTriggers) if (t.indexOf(k) >= 0) hits.push("sugar:" + k);
+        for (const k of allergyTriggers) if (t.indexOf(k) >= 0) hits.push("allergen:" + k);
+        for (const k of hypertensionTriggers) if (t.indexOf(k) >= 0) hits.push("sodium:" + k);
+        for (const k of fatTriggers) if (t.indexOf(k) >= 0) hits.push("fat:" + k);
+
+        let verdict: "Safe" | "Caution" | "Avoid";
+        let reason: string;
+        if (profileId === "diabetic" && hits.some(h => h.indexOf("sugar:") === 0)) {
+            verdict = "Avoid";
+            reason = "Contains added sugars (diabetic profile)";
+        } else if (profileId === "allergy" && hits.some(h => h.indexOf("allergen:") === 0)) {
+            verdict = "Avoid";
+            reason = "Contains flagged allergen";
+        } else if (hits.some(h => h.indexOf("fat:") === 0)) {
+            verdict = "Caution";
+            reason = "Contains hydrogenated or trans fats";
+        } else if (hits.length === 0) {
+            verdict = "Safe";
+            reason = "No flagged ingredients";
+        } else {
+            verdict = "Caution";
+            reason = "Has some watch-list ingredients";
+        }
+        return { verdict, reason, flags: hits };
+    }
+
     // Extract the most informative error string possible from whatever Lens Studio
     // decides to throw. We want the AR label to show e.g. "TypeError: Failed to fetch"
     // rather than a vague "fetch err" that tells us nothing about the real cause.
@@ -366,19 +451,23 @@ export class ShelfSenseApp extends BaseScriptComponent {
             return;
         }
 
-        if (!this.cameraProvider) {
+        // In Mobile mock mode we don't have our own CameraModule, so we
+        // synthesize a capture from whatever state we have and let the mock
+        // analyzer produce a verdict. On Spectacles we still require a real
+        // camera provider to ensure the live-frame scan path is honored.
+        let width: number = 0;
+        let height: number = 0;
+        if (this.cameraProvider) {
+            try {
+                width = this.cameraProvider.getWidth();
+                height = this.cameraProvider.getHeight();
+            } catch (e) {
+                print("[ShelfSense] pinch " + hand + " size read failed: " + ShelfSenseApp.describeError(e));
+            }
+        } else if (!this.mobileMockMode) {
             this.refreshText("Pinch #" + this.pinchCount + " (camera not ready)");
             print("[ShelfSense] pinch " + hand + " #" + this.pinchCount + " - camera not ready");
             return;
-        }
-
-        let width: number = 0;
-        let height: number = 0;
-        try {
-            width = this.cameraProvider.getWidth();
-            height = this.cameraProvider.getHeight();
-        } catch (e) {
-            print("[ShelfSense] pinch " + hand + " size read failed: " + ShelfSenseApp.describeError(e));
         }
 
         this.lastCapture = {
@@ -415,6 +504,34 @@ export class ShelfSenseApp extends BaseScriptComponent {
             this.scanError = "no capture";
             this.refreshText(null);
             print("[ShelfSense] scan ABORT: no capture");
+            return;
+        }
+
+        // Mobile Snapchat: no fetch, so no network. Run the local analyzer
+        // against DEMO_OCR_TEXT so the pinch -> verdict experience still
+        // demos end-to-end (minus the real backend + real OCR). Verdicts
+        // are prefixed [MOCK] so the distinction from the real flow is
+        // always visible on-device.
+        if (this.mobileMockMode) {
+            this.scanStatus = "sending";
+            this.scanError = "";
+            this.scanVerdictLine = "";
+            this.refreshText(null);
+            const mock = ShelfSenseApp.localMockVerdict(
+                ShelfSenseApp.DEMO_OCR_TEXT,
+                this.activeProfileId
+            );
+            this.applyVerdict({
+                verdict: mock.verdict,
+                reason: mock.reason,
+                flags: mock.flags,
+                source: "mobile-mock",
+            });
+            print(
+                "[ShelfSense] mock scan #" + this.lastCapture.pinchId +
+                " -> " + mock.verdict + " (" + mock.reason + ")"
+            );
+            this.refreshText(null);
             return;
         }
 
@@ -535,7 +652,6 @@ export class ShelfSenseApp extends BaseScriptComponent {
             data && Array.isArray(data.flags) && data.flags.length > 0 ? String(data.flags[0]) :
             "";
         const src: string = data && data.source ? String(data.source) : "heuristic";
-        const isDemo = src !== "heuristic";
         // Only downgrade the OCR-ready flag here: source==="demo-no-ocr" is
         // conclusive proof the backend couldn't reach Vision. We must NOT
         // upgrade to true on source==="heuristic", because the heuristic path
@@ -545,9 +661,17 @@ export class ShelfSenseApp extends BaseScriptComponent {
         if (src === "demo-no-ocr") {
             this.backendOcrReady = false;
         }
+        // Prefix semantics:
+        //   [MOCK] - verdict came from the client-side mock on Mobile Snap
+        //            (no network call happened).
+        //   [DEMO] - verdict came from the backend but it substituted demo
+        //            ingredients because Vision API key is missing.
+        //   (none) - real backend heuristic ran on real OCR text.
+        let prefix = "";
+        if (src === "mobile-mock") prefix = "[MOCK] ";
+        else if (src !== "heuristic") prefix = "[DEMO] ";
         const short = reason.length > 60 ? reason.substring(0, 57) + "..." : reason;
         this.scanStatus = "ok";
-        const prefix = isDemo ? "[DEMO] " : "";
         this.scanVerdictLine = short
             ? prefix + verdict.toUpperCase() + " - " + short
             : prefix + verdict.toUpperCase();
@@ -571,6 +695,8 @@ export class ShelfSenseApp extends BaseScriptComponent {
             if (this.backendOcrReady === true) ocrTag = " | OCR: ready";
             else if (this.backendOcrReady === false) ocrTag = " | OCR: demo-mode";
             line1 = "Backend: OK" + (this.backendDemoMode ? " (demo)" : "") + ocrTag;
+        } else if (this.backendStatus === "mobile-mock") {
+            line1 = "Mobile preview (mock) - pair Spectacles for real scan";
         } else if (this.backendStatus === "probing") {
             line1 = "Backend: probing " + this.probeAttempt + "/" + ShelfSenseApp.MAX_PROBE_ATTEMPTS;
         } else if (this.backendStatus === "down") {
