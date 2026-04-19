@@ -22,4 +22,8 @@ export const config = {
     port: envInt("PORT", 3000),
     nodeEnv: envString("NODE_ENV", "development"),
     demoMode: envBool("DEMO_MODE", true),
+    // Google Cloud Vision API key. When set, /api/analyze-label will OCR
+    // `image_base64` payloads via Vision REST. Without it, image payloads
+    // return a 501 with a clear setup message — no silent fallback.
+    googleVisionApiKey: envString("GOOGLE_VISION_API_KEY", ""),
 };

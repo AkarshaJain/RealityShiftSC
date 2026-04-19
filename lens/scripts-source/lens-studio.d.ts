@@ -30,25 +30,11 @@ declare type GestureModule = {
     getPinchUpEvent(hand: GestureModule.HandType): { add: (cb: (args?: any) => void) => any };
 };
 
-declare namespace CameraModule {
-    enum CameraId {
-        Left_Color,
-        Right_Color,
-        Default_Color,
-    }
-    class CameraRequest {
-        cameraId: CameraModule.CameraId;
-        imageSmallerDimension?: number;
-    }
-    class CameraFrame {}
-}
-declare type CameraModule = {
-    requestCamera(req: CameraModule.CameraRequest): any;
-};
-declare const CameraModule: {
-    createCameraRequest(): CameraModule.CameraRequest;
-    CameraId: typeof CameraModule.CameraId;
-};
+// CameraModule is injected as a global by Lens Studio. We declare it as a
+// single const whose shape contains both the factory/enum and the runtime
+// methods. Using `any` for the inner enum avoids fighting TS about how
+// namespaces merge with consts — this file is editor-hint only.
+declare const CameraModule: any;
 
 declare class Request {
     constructor(url: string, init?: { method?: string; body?: string; headers?: Record<string, string> });
@@ -66,4 +52,31 @@ declare type InternetModule = {
         body?: string;
         headers?: Record<string, string>;
     }): Promise<Response>;
+};
+
+declare const CompressionQuality: {
+    LowQuality: number;
+    Low: number;
+    Medium: number;
+    HighQuality: number;
+    High: number;
+};
+
+declare const EncodingType: {
+    Jpg: number;
+    JPG: number;
+    JPEG: number;
+    Png: number;
+    PNG: number;
+};
+
+declare const Base64: {
+    encodeTextureAsync(
+        texture: any,
+        onSuccess: (encoded: string) => void,
+        onFailure: () => void,
+        compressionQuality: number,
+        encodingType: number,
+    ): void;
+    decode(encoded: string): string;
 };

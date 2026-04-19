@@ -64,9 +64,10 @@ export class ShelfSenseApp extends BaseScriptComponent {
     private static readonly MAX_PROBE_ATTEMPTS: number = 6;
     private static readonly PROBE_RETRY_SECONDS: number = 5;
 
-    // Placeholder ingredient text used until Layer 5 (on-device image capture + OCR)
-    // gives us the real label text. The backend accepts this and returns a real
-    // verdict against the selected demo profile.
+    // Fallback OCR text for environments where we cannot get a real camera
+    // frame (Lens Studio preview, camera still booting, encoding fails).
+    // On real Spectacles the live frame is encoded and sent as `image_base64`,
+    // and the backend OCRs it via Google Vision — that is the real product path.
     private static readonly DEMO_OCR_TEXT: string =
         "Sugar, high fructose corn syrup, wheat flour, partially hydrogenated soybean oil, salt, artificial flavors.";
 
@@ -177,6 +178,47 @@ export class ShelfSenseApp extends BaseScriptComponent {
             print("[ShelfSense] probe threw [" + detail + "] raw=" + String(e));
             this.scheduleProbeRetry();
         }
+    }
+
+    // Wrap the callback-style Base64.encodeTextureAsync in a Promise so the
+    // scan flow can `await` it. We request JPEG at medium compression — small
+    // enough to POST cheaply on glasses Wi-Fi, still legible enough for OCR.
+    //
+    // Docs: https://developers.snap.com/lens-studio/api/lens-scripting/classes/Built-In.Base64.html
+    private encodeCameraFrameAsJpeg(): Promise<string> {
+        return new Promise<string>((resolve, reject) => {
+            if (typeof Base64 === "undefined" || typeof (Base64 as any).encodeTextureAsync !== "function") {
+                reject(new Error("Base64.encodeTextureAsync unavailable"));
+                return;
+            }
+            if (typeof CompressionQuality === "undefined" || typeof EncodingType === "undefined") {
+                reject(new Error("CompressionQuality/EncodingType enums unavailable"));
+                return;
+            }
+            try {
+                (Base64 as any).encodeTextureAsync(
+                    this.cameraTexture,
+                    (b64: string) => {
+                        if (!b64) {
+                            reject(new Error("empty base64 result"));
+                            return;
+                        }
+                        resolve(b64);
+                    },
+                    () => {
+                        reject(new Error("encodeTextureAsync onFailure"));
+                    },
+                    (CompressionQuality as any).LowQuality ??
+                        (CompressionQuality as any).Low ??
+                        (CompressionQuality as any).Medium,
+                    (EncodingType as any).Jpg ??
+                        (EncodingType as any).JPG ??
+                        (EncodingType as any).JPEG,
+                );
+            } catch (e) {
+                reject(e);
+            }
+        });
     }
 
     // Extract the most informative error string possible from whatever Lens Studio
@@ -298,24 +340,53 @@ export class ShelfSenseApp extends BaseScriptComponent {
         this.scanVerdictLine = "";
         this.refreshText(null);
 
+        // Try to encode the current live camera frame as JPEG base64. This is
+        // the REAL product-scan path: the backend will OCR this image via
+        // Google Vision and run the analyzer on whatever text is on the label.
+        // If the encode fails (Lens Studio preview, camera bug, etc.) we fall
+        // back to DEMO_OCR_TEXT so the pipeline is still exercised.
+        let imageBase64: string | null = null;
+        let imageErr: string = "";
+        if (this.cameraTexture) {
+            try {
+                imageBase64 = await this.encodeCameraFrameAsJpeg();
+                print(
+                    "[ShelfSense] encoded frame chars=" +
+                    (imageBase64 ? imageBase64.length : 0)
+                );
+            } catch (e) {
+                imageErr = ShelfSenseApp.describeError(e);
+                print("[ShelfSense] encode fail: " + imageErr);
+            }
+        } else {
+            imageErr = "no camera texture";
+        }
+
         const url = this.backendUrl + "/api/analyze-label";
-        const bodyObj = {
+        const bodyObj: any = {
             session_id: this.sessionId,
             profile_id: this.activeProfileId,
-            ocr_text: ShelfSenseApp.DEMO_OCR_TEXT,
             capture: {
                 pinch_id: this.lastCapture.pinchId,
                 hand: hand,
                 width: this.lastCapture.width,
                 height: this.lastCapture.height,
                 frame_timestamp: this.lastCapture.timestampSeconds,
+                image_source: imageBase64 ? "spectacles-camera" : "demo-fallback",
+                encode_error: imageErr || undefined,
             },
         };
+        if (imageBase64) {
+            bodyObj.image_base64 = imageBase64;
+        } else {
+            bodyObj.ocr_text = ShelfSenseApp.DEMO_OCR_TEXT;
+        }
         const body = JSON.stringify(bodyObj);
 
         print(
             "[ShelfSense] scan POST " + url +
-            " len=" + body.length +
+            " bytes=" + body.length +
+            " mode=" + (imageBase64 ? "image" : "demo-text") +
             " profile=" + this.activeProfileId +
             " pinch=" + this.lastCapture.pinchId
         );
