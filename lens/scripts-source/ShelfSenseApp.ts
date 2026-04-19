@@ -144,11 +144,14 @@ export class ShelfSenseApp extends BaseScriptComponent {
         print("[ShelfSense] probe attempt " + this.probeAttempt + " -> " + url);
 
         try {
-            const req = new Request(url, {
+            // NOTE: we use the (string, options) form of fetch. The `new Request(...)`
+            // form throws `ReferenceError: 'Request' is not defined` in Lens Studio's
+            // JS runtime (both Preview and some device builds). Per Snap's docs,
+            // InternetModule.fetch(url: string | Request, options?: any) is valid.
+            const resp = await this.internetModule.fetch(url, {
                 method: "GET",
                 headers: { "Accept": "application/json" },
             });
-            const resp = await this.internetModule.fetch(req);
             print(
                 "[ShelfSense] probe resp status=" + resp.status +
                 " (attempt " + this.probeAttempt + ")"
@@ -318,7 +321,8 @@ export class ShelfSenseApp extends BaseScriptComponent {
         );
 
         try {
-            const req = new Request(url, {
+            // String URL + options form. See probeBackend() for rationale.
+            const resp = await this.internetModule.fetch(url, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -326,7 +330,6 @@ export class ShelfSenseApp extends BaseScriptComponent {
                 },
                 body: body,
             });
-            const resp = await this.internetModule.fetch(req);
             print("[ShelfSense] scan resp status=" + resp.status);
             if (resp.status !== 200) {
                 // Try to read an error body for diagnostics; don't crash if unavailable.

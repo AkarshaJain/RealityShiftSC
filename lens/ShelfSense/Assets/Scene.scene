@@ -213,6 +213,25 @@
   Enabled: true
   ScriptAsset: !<reference> 0aed561a-cec8-40d1-a6b7-242d7b642ffb
   ScriptInputsDefault:
+    {}
+  ScriptTypesDefault:
+    {}
+  ScriptInputs:
+    "":
+      statusText: !<reference.SceneObject> 8fd6dea7-c840-4687-ab6b-99895042e5de
+      internetModule: !<reference.InternetModule> dbe8e0c1-a144-406a-9235-d524bd08c615
+      backendUrl: "https://shelfsense-backend-o79b.onrender.com"
+  ScriptTypes:
+    "":
+      {}
+- !<ScriptComponent/754c1fed-d6b4-4d45-9fd8-5e87ede79279>
+  PrefabRemaps:
+    []
+  Name: ShelfSenseApp
+  Enabled: true
+  ScriptAsset: !<reference> e5d95428-0444-4936-b8b4-a89c6573a9ce
+  ScriptInputsDefault:
+    internetModule: true
     backendUrl: true
   ScriptTypesDefault:
     {}
@@ -220,7 +239,7 @@
     "":
       statusText: !<reference.SceneObject> 8fd6dea7-c840-4687-ab6b-99895042e5de
       internetModule: !<reference.InternetModule> dbe8e0c1-a144-406a-9235-d524bd08c615
-      backendUrl: "http://10.25.33.161:3000"
+      backendUrl: "https://shelfsense-backend-o79b.onrender.com"
   ScriptTypes:
     "":
       {}
@@ -240,3 +259,4 @@
   Components:
     - !<own> 0fa542b9-977e-4feb-bae8-377377907ed0
     - !<own> 25ea9d81-b095-4ba4-927c-f4056b88e1d3
+    - !<own> 754c1fed-d6b4-4d45-9fd8-5e87ede79279

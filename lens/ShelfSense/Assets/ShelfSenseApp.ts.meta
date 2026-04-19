@@ -1,20 +1,20 @@
-- !<AssetImportMetadata/c675b352-668c-4c28-b483-9b52161268b0>
+- !<AssetImportMetadata/d56f4604-6ad7-42ea-846f-2deabdf6c0fa>
   ImportedAssetIds:
-    TypeScriptAsset: !<reference> 0aed561a-cec8-40d1-a6b7-242d7b642ffb
+    TypeScriptAsset: !<reference> e5d95428-0444-4936-b8b4-a89c6573a9ce
   ImporterName: TypeScriptAssetImporter
-  PrimaryAsset: !<reference> 0aed561a-cec8-40d1-a6b7-242d7b642ffb
+  PrimaryAsset: !<reference> e5d95428-0444-4936-b8b4-a89c6573a9ce
   PackageType: NotAPackage
   LegacyPackagePolicy: ~
   ExtraData:
     {}
   AssetDataMap:
-    TypeScriptAsset: !<own> 5eb25745-1116-49cb-9669-3825d3929e7a
+    TypeScriptAsset: !<own> 516c757e-bb45-4d47-a5c8-8804df52aaf7
   DependentFiles:
     []
   ImporterSettings: !<AssetImporterSettings>
     {}
   CompressionSettings: !<own> 00000000-0000-0000-0000-000000000000
-- !<TypeScriptAssetData/5eb25745-1116-49cb-9669-3825d3929e7a>
+- !<TypeScriptAssetData/516c757e-bb45-4d47-a5c8-8804df52aaf7>
   SvgIcon: ""
   SetupScript:
     code: ""
@@ -22,7 +22,7 @@
   VersionMajor: 0
   VersionMinor: 0
   VersionPatch: 0
-  ComponentUid: 2c9bbae0-26d7-4dea-b35e-6d0e8650f531
+  ComponentUid: 2d08429e-11b7-4ce6-9665-c316b81865e5
   ExportUid: 00000000-0000-0000-0000-000000000000
   PackagePolicy: CanBeUnpacked
   ScriptInputsHidden:
@@ -39,12 +39,12 @@
     []
   DefaultScriptInputs:
     - statusText: !<reference.SceneObject> 00000000-0000-0000-0000-000000000000
-      internetModule: !<reference.InternetModule> 00000000-0000-0000-0000-000000000000
-      backendUrl: "http://10.25.33.161:3000"
+      internetModule: !<reference.InternetModule> dbe8e0c1-a144-406a-9235-d524bd08c615
+      backendUrl: "https://shelfsense-backend-o79b.onrender.com"
   ScriptTypes:
     -
       {}
   InputLines:
     - // @input SceneObject statusText
     - // @input Asset.InternetModule internetModule
-    - '// @input string backendUrl = "http://10.25.33.161:3000"'
+    - '// @input string backendUrl = "https://shelfsense-backend-o79b.onrender.com"'

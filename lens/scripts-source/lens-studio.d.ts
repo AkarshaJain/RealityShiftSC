@@ -61,5 +61,9 @@ declare class Response {
 }
 
 declare type InternetModule = {
-    fetch(request: Request): Promise<Response>;
+    fetch(request: string | Request, options?: {
+        method?: string;
+        body?: string;
+        headers?: Record<string, string>;
+    }): Promise<Response>;
 };
