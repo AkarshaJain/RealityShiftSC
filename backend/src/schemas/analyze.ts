@@ -38,15 +38,27 @@ export const CartImpactSchema = z.object({
 });
 export type CartImpact = z.infer<typeof CartImpactSchema>;
 
+// Clients can send either a full `health_profile` OR reference a demo profile by
+// `profile_id` (one of the keys in backend/src/demo/profiles.ts). This lets lean
+// clients (like the Spectacles lens) keep a single string instead of replicating
+// the full profile schema on every request.
 export const AnalyzeLabelRequestSchema = z.object({
     ocr_text: z.string().optional(),
     image_base64: z.string().optional(),
-    health_profile: HealthProfileSchema,
+    health_profile: HealthProfileSchema.optional(),
+    profile_id: z.string().optional(),
     product_name: z.string().optional(),
     cart_context: CartContextSchema.optional(),
+    // Arbitrary capture metadata from the client (frame size, pinch id, etc.).
+    // Recorded for diagnostics, not required for analysis.
+    capture: z.record(z.string(), z.unknown()).optional(),
+    session_id: z.string().optional(),
 }).refine(
     (v) => Boolean(v.ocr_text) || Boolean(v.image_base64),
     { message: "provide either ocr_text or image_base64" }
+).refine(
+    (v) => Boolean(v.health_profile) || Boolean(v.profile_id),
+    { message: "provide either health_profile or profile_id" }
 );
 export type AnalyzeLabelRequest = z.infer<typeof AnalyzeLabelRequestSchema>;
 
